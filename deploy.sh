@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Deploy branch can be overridden via $DEPLOY_BRANCH
+DEPLOY_BRANCH="${DEPLOY_BRANCH:-p1.micro-optimization}"
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 timestamp() {
@@ -60,7 +63,7 @@ commit_and_push() {
   else
     echo "No changes to commit"
   fi
-  git -C "$ROOT_DIR" push origin main || true
+  git -C "$ROOT_DIR" push -u origin "$DEPLOY_BRANCH" || true
   echo "Pushed to GitHub"
 }
 
@@ -82,9 +85,9 @@ origin_spec() {
   if [[ "$https" != git+* ]]; then
     https="git+${https}"
   fi
-  # default to @main ref
+  # default to @${DEPLOY_BRANCH} ref
   if [[ "$https" != *"@"* ]]; then
-    https="${https}@main"
+    https="${https}@${DEPLOY_BRANCH}"
   fi
   echo "$https"
 }

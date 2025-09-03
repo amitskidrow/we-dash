@@ -4,6 +4,7 @@ import asyncio
 import re
 from asyncio.subprocess import PIPE
 from pathlib import Path
+from functools import lru_cache
 from typing import Iterable
 
 from .models import Service
@@ -12,16 +13,29 @@ from .models import Service
 _TARGET_RE = re.compile(r"^\s*([A-Za-z0-9_.-]+)\s*:\s*")
 
 
-def _make_targets(makefile: Path) -> set[str]:
+@lru_cache(maxsize=512)
+def _cached_targets(path_str: str, mtime: float) -> set[str]:
+    """LRU-cached parser for Makefile targets keyed by path + mtime."""
+    p = Path(path_str)
     targets: set[str] = set()
     try:
-        for line in makefile.read_text(errors="ignore").splitlines():
+        for line in p.read_text(errors="ignore").splitlines():
             m = _TARGET_RE.match(line)
             if m:
                 targets.add(m.group(1))
     except Exception:
-        pass
+        # On any error, return empty set and cache it; mtime key invalidates later
+        return set()
     return targets
+
+
+def _make_targets(makefile: Path) -> set[str]:
+    try:
+        st = makefile.stat()
+        mtime = st.st_mtime
+    except Exception:
+        return set()
+    return _cached_targets(str(makefile), mtime)
 
 
 def has_target(service: Service, target: str) -> bool:

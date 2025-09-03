@@ -13,6 +13,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal
 from textual.widgets import DataTable, Footer, Input, Tabs, Tab, RichLog, Label
+from textual.timer import Timer
 
 from .discovery import discover_services
 from .models import AppState, Service
@@ -53,6 +54,8 @@ class WeDashApp(App):
         self._rows: list[int] = []  # maps row index -> service index
         self._follow_task: Task | None = None
         self._status_task: Task | None = None
+        self._search_timer: Timer | None = None
+        self._follow_current: tuple[str | None, bool] = (None, False)  # (unit, journal?)
 
     def compose(self) -> ComposeResult:
         with Container(id="header"):
@@ -265,11 +268,29 @@ class WeDashApp(App):
     @on(Input.Changed)
     def _on_search_changed(self, event: Input.Changed) -> None:
         if event.input.id == "search":
+            # Update state immediately but debounce expensive rebuilds
             self.state.search = event.value
-            self._rebuild_table(select_same=True)
+            if self._search_timer is not None:
+                try:
+                    self._search_timer.stop()
+                except Exception:
+                    pass
+            # Debounce table rebuild to reduce churn during typing
+            def _apply():
+                try:
+                    self._rebuild_table(select_same=True)
+                except Exception:
+                    # Non-fatal; ignore to keep UI responsive
+                    return
+
+            self._search_timer = self.set_timer(0.2, _apply)
 
     async def _start_follow(self, svc: Service, force_journal: bool = False) -> None:
         # Cancel previous task
+        # Guard against redundant restarts of the same follow target
+        if (self._follow_current[0] == svc.unit) and (self._follow_current[1] == force_journal) and self._follow_task and not self._follow_task.done():
+            return
+
         if self._follow_task and not self._follow_task.done():
             self._follow_task.cancel()
             with suppress(Exception):
@@ -282,6 +303,8 @@ class WeDashApp(App):
         else:
             argv = follow_argv(svc)
         self.log_widget.write(f"$ {' '.join(argv)}\n")
+        # Track current follow target
+        self._follow_current = (svc.unit, force_journal)
 
         async def _runner():
             def _out(line: str):

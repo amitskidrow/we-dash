@@ -4,6 +4,7 @@ import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
+import os
 from typing import Iterable
 
 from .models import Service
@@ -74,20 +75,29 @@ def discover_services(roots: Iterable[Path], max_depth: int = 5) -> list[Service
     return services
 
 
+IGNORE_DIRS = {".git", ".hg", ".svn", ".venv", "venv", "node_modules", "dist", "build", "target", "__pycache__"}
+
+
 def _walk_limited(root: Path, max_depth: int):
-    """Yield directories up to max_depth relative to root (0 means root only)."""
+    """Yield directories up to max_depth relative to root (0 means root only).
+
+    Uses os.walk with topdown traversal so we can prune ignored or too-deep directories
+    without stat-ing every nested path.
+    """
     root = root.resolve()
-    for path in root.rglob("*"):
-        if not path.is_dir():
+    max_depth = max(0, int(max_depth))
+    base_depth = len(root.parts)
+    for dirpath, dirnames, _filenames in os.walk(root, topdown=True):
+        cur_path = Path(dirpath)
+        # Prune ignored directories in-place
+        dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS]
+        # Compute depth relative to root
+        depth = len(Path(dirpath).parts) - base_depth
+        if depth > max_depth:
+            # Stop descending further by clearing dirnames
+            dirnames[:] = []
             continue
-        try:
-            rel = path.relative_to(root)
-        except ValueError:
-            # Shouldn't happen
-            continue
-        depth = len(rel.parts)
-        if depth <= max_depth:
-            yield path
+        yield cur_path
 
 
 def _infer_project(service_dir: Path, roots: list[Path]) -> str | None:
