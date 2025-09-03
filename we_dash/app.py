@@ -143,7 +143,15 @@ class WeDashApp(App):
     @on(DataTable.RowHighlighted)
     async def _on_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         # Update selected index
-        row = event.row_index
+        # Textual changed the event attribute from `row_index` -> `cursor_row`.
+        # Support both to avoid crashes across versions.
+        row = getattr(event, "row_index", None)
+        if row is None:
+            row = getattr(event, "cursor_row", None)
+        if row is None and self.table is not None:
+            row = self.table.cursor_row
+        if row is None:
+            return
         if not (0 <= row < len(self._rows)):
             return
         idx = self._rows[row]
