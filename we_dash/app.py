@@ -12,7 +12,7 @@ from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal
-from textual.widgets import DataTable, Footer, Input, Tabs, Tab, Log, Label
+from textual.widgets import DataTable, Footer, Input, Tabs, Tab, RichLog, Label
 
 from .discovery import discover_services
 from .models import AppState, Service
@@ -48,7 +48,8 @@ class WeDashApp(App):
         self.last = last
         self.columns_mode = columns
         self.table: DataTable | None = None
-        self.log: Log | None = None
+        # Avoid clashing with Textual App.log (read-only property)
+        self.log_widget: RichLog | None = None
         self._rows: list[int] = []  # maps row index -> service index
         self._follow_task: Task | None = None
         self._status_task: Task | None = None
@@ -75,9 +76,9 @@ class WeDashApp(App):
             yield self.table
 
         with Container(id="content-right"):
-            self.log = Log(highlight=False, markup=False, wrap=False)
-            self.log.write("WeDash — select a service to follow logs…")
-            yield self.log
+            self.log_widget = RichLog(highlight=False, markup=False, wrap=False)
+            self.log_widget.write("WeDash — select a service to follow logs…")
+            yield self.log_widget
 
         yield Footer(id="footer")
 
@@ -266,36 +267,36 @@ class WeDashApp(App):
             with suppress(Exception):
                 await self._follow_task
 
-        assert self.log
-        self.log.clear()
+        assert self.log_widget
+        self.log_widget.clear()
         if force_journal:
             argv = ["journalctl", "--user", "-f", "-u", svc.unit]
         else:
             argv = follow_argv(svc)
-        self.log.write(f"$ {' '.join(argv)}\n")
+        self.log_widget.write(f"$ {' '.join(argv)}\n")
 
         async def _runner():
             def _out(line: str):
-                assert self.log
-                self.log.write(line.rstrip("\n"))
+                assert self.log_widget
+                self.log_widget.write(line.rstrip("\n"))
 
             def _err(line: str):
-                assert self.log
-                self.log.write(line.rstrip("\n"))
+                assert self.log_widget
+                self.log_widget.write(line.rstrip("\n"))
 
             try:
                 rc = await run_command(argv, cwd=svc.dir, on_stdout_line=_out, on_stderr_line=_err)
-                self.log.write(f"\n[exit {rc}]")
+                self.log_widget.write(f"\n[exit {rc}]")
             except asyncio.CancelledError:
                 pass
             except Exception as e:
-                self.log.write(f"\n[error: {e}]")
+                self.log_widget.write(f"\n[error: {e}]")
 
         self._follow_task = asyncio.create_task(_runner())
 
     async def _run_one_shot(self, argv: list[str], svc: Service) -> int:
-        assert self.log
-        self.log.write(f"$ {' '.join(argv)}\n")
+        assert self.log_widget
+        self.log_widget.write(f"$ {' '.join(argv)}\n")
 
         lines: list[str] = []
 
@@ -307,14 +308,14 @@ class WeDashApp(App):
 
         rc = await run_command(argv, cwd=svc.dir, on_stdout_line=_out, on_stderr_line=_err)
         for ln in lines:
-            self.log.write(ln)
-        self.log.write(f"\n[exit {rc}]")
+            self.log_widget.write(ln)
+        self.log_widget.write(f"\n[exit {rc}]")
         return rc
 
     def _toast(self, msg: str) -> None:
         # Minimal inline notification
-        assert self.log
-        self.log.write(f"[note] {msg}")
+        assert self.log_widget
+        self.log_widget.write(f"[note] {msg}")
 
     def _visible_indices(self) -> list[int]:
         # Compute visible based on filter + search

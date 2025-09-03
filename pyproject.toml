@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "we-dash"
-version = "0.1.3"
+version = "0.1.4"
 description = "WeDash: Minimal TUI to discover microservices and follow logs"
 readme = "README.md"
 requires-python = ">=3.11"
