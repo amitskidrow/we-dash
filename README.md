@@ -2,6 +2,11 @@
 
 Minimal TUI to auto-discover microservices (dirs with both `.we.pid` and `Makefile`) and follow their logs by default.
 
+Install (recommended):
+
+- Using uv tool: `uv tool install --from git+https://github.com/amitskidrow/we-dash.git@main we-dash`
+- Using pipx: `pipx install git+https://github.com/amitskidrow/we-dash.git@main`
+
 Quick start (dev):
 
 - Create venv: `uv venv && source .venv/bin/activate`

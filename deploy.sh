@@ -96,13 +96,13 @@ install_remote() {
   local spec
   spec=$(origin_spec)
 
+  # Ephemeral validation via uvx if present
   if command -v uvx >/dev/null 2>&1; then
     echo "Checking via uvx from $spec"
     set +e
     uvx --from "$spec" we-dash --help >/tmp/we_dash_help.txt 2>&1
     local rc1=$?
-    uvx --from "$spec" python -c 'import we_dash; import sys; print(we_dash.__version__)' >/tmp/we_dash_ver.txt 2>&1
-    local rc2=$?
+    uvx --from "$spec" python -c 'import we_dash; print(we_dash.__version__)' >/tmp/we_dash_ver.txt 2>&1
     set -e
     echo "we-dash --help rc=$rc1"
     if [[ -s /tmp/we_dash_ver.txt ]]; then
@@ -110,27 +110,62 @@ install_remote() {
     else
       echo "Could not determine version via uvx"
     fi
-    return 0
   fi
 
-  if command -v pipx >/dev/null 2>&1; then
-    echo "Checking via pipx from $spec"
-    set +e
-    pipx run --spec "$spec" we-dash --help >/tmp/we_dash_help.txt 2>&1
-    local rc1=$?
-    pipx run --spec "$spec" python -c 'import we_dash; import sys; print(we_dash.__version__)' >/tmp/we_dash_ver.txt 2>&1
-    local rc2=$?
-    set -e
-    echo "we-dash --help rc=$rc1"
-    if [[ -s /tmp/we_dash_ver.txt ]]; then
-      echo "Installed version: $(cat /tmp/we_dash_ver.txt)"
+  # Prefer global install with uv tool so 'which we-dash' resolves
+  if command -v uv >/dev/null 2>&1; then
+    echo "Installing globally via: uv tool install --force --from $spec we-dash"
+    if UV_TOOL_OUT=$(uv tool install --force --from "$spec" we-dash 2>&1); then
+      echo "$UV_TOOL_OUT" | sed -n '1,80p'
+      echo "we-dash --version -> $(we-dash --help >/dev/null 2>&1 && python -c 'import we_dash, sys; sys.stdout.write(getattr(we_dash, "__version__", "unknown"))' 2>/dev/null || echo unknown)"
+      echo "which we-dash -> $(command -v we-dash || echo not found)"
+      return 0
     else
-      echo "Could not determine version via pipx"
+      echo -e "uv tool install failed, output follows:\n$UV_TOOL_OUT"
     fi
-    return 0
   fi
 
-  echo "Neither uvx nor pipx found; skipping remote install check"
+  # Fallback to pipx if available
+  if command -v pipx >/dev/null 2>&1; then
+    echo "Installing globally via: pipx install --force --spec $spec we-dash (or legacy syntax)"
+    if PIPX_OUT=$(pipx install --force --spec "$spec" we-dash 2>&1); then
+      echo "$PIPX_OUT" | sed -n '1,80p'
+      echo "which we-dash -> $(command -v we-dash || echo not found)"
+      echo "we-dash --version -> $(we-dash --help >/dev/null 2>&1 && python -c 'import we_dash, sys; sys.stdout.write(getattr(we_dash, "__version__", "unknown"))' 2>/dev/null || echo unknown)"
+      return 0
+    else
+      echo "pipx --spec not supported; trying: pipx install --force $spec"
+      if PIPX_OUT2=$(pipx install --force "$spec" 2>&1); then
+        echo "$PIPX_OUT2" | sed -n '1,80p'
+        echo "which we-dash -> $(command -v we-dash || echo not found)"
+        echo "we-dash --version -> $(we-dash --help >/dev/null 2>&1 && python -c 'import we_dash, sys; sys.stdout.write(getattr(we_dash, "__version__", "unknown"))' 2>/dev/null || echo unknown)"
+        return 0
+      else
+        echo -e "pipx install failed, output follows:\n$PIPX_OUT\n--- legacy attempt ---\n$PIPX_OUT2"
+      fi
+    fi
+  fi
+
+  # Final fallback: install from local checkout
+  if command -v uv >/dev/null 2>&1; then
+    echo "Falling back to local install via uv tool"
+    if UV_TOOL_OUT2=$(uv tool install --force --from . we-dash 2>&1); then
+      echo "$UV_TOOL_OUT2" | sed -n '1,80p'
+      echo "which we-dash -> $(command -v we-dash || echo not found)"
+      echo "we-dash --version -> $(we-dash --help >/dev/null 2>&1 && python -c 'import we_dash, sys; sys.stdout.write(getattr(we_dash, "__version__", "unknown"))' 2>/dev/null || echo unknown)"
+      return 0
+    fi
+  fi
+  if command -v pipx >/dev/null 2>&1; then
+    echo "Falling back to local install via pipx"
+    if PIPX_OUT3=$(pipx install --force . 2>&1); then
+      echo "$PIPX_OUT3" | sed -n '1,80p'
+      echo "which we-dash -> $(command -v we-dash || echo not found)"
+      echo "we-dash --version -> $(we-dash --help >/dev/null 2>&1 && python -c 'import we_dash, sys; sys.stdout.write(getattr(we_dash, "__version__", "unknown"))' 2>/dev/null || echo unknown)"
+      return 0
+    fi
+  fi
+  echo "No usable installer or all installs failed; performed only ephemeral uvx check"
 }
 
 main() {
@@ -140,4 +175,3 @@ main() {
 }
 
 main "$@"
-
