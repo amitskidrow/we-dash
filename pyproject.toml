@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "we-dash"
+version = "0.1.1"
+description = "WeDash: Minimal TUI to discover microservices and follow logs"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [
+  { name = "WeDash" }
+]
+dependencies = [
+  "textual>=1.0,<2.0",
+]
+
+[project.scripts]
+we-dash = "we_dash.app:main"
+
+[tool.uv]
+dev-dependencies = []
+
+[tool.hatch.build]
+include = [
+  "we_dash/**/*.py",
+  "we_dash/**/*.tcss",
+]
